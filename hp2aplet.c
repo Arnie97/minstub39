@@ -18,49 +18,24 @@
 //the library file
 #define HP_LIB_FILE "LIB275L.L39"
 #define HP_LIB_FILE_OUT "LIB275L.000"
+#define FILE_1 "apletcode.bin"
+#define FILE_2 "apletepilog.bin"
 
-char source[255]; //name of source file
-char destination[255];  //target file
 int verbose = 0; //not verbose by default
-int rawmode = 0 ;// make a complete aplet by default
-
-char *dataFolder;  //the folder storing the data, eg "C:\arm-hp\bin" on win
 
 FILE *inputFile;
 FILE *outputFile;
 
-//configuration stuff (read in from hp39prj.dat)
+const char
+raw_filename[] = "HPGCC000.S",
+aplet_filename[] = "HPGCC000.000",
+default_grob[] = "blank.gro";
 
-char apletName[50]; //the name of the aplet
-char authorName[50]; //author name
+// configuration stuff (read in from command line arguments)
+const char *aplet_name, *author_name;
+const char *source_filename, *destination_filename, *grob_filename;
 
-char grobFileName[50]; //grob file
 int X = 0, Y = 0; //position of the graphic
-
-char slack[200]; //slack space, used by addDataPath
-
-//This makes a copy of 'dataFolder' and appends 'fileName'
-//eg used for creating paths to HP-GCC data files
-//caution: calling this multiple times will invalidate the previous result!
-
-char *addDataPath(char *fileName)
-{
-    strcpy(slack, dataFolder); //slack = location of data files, but NO trailing slash
-
-    //now add the slash. To ensure portability, we have to detect if we're running on windows or unix
-    //and put the right kind of slash ( '\' for windows, '/' for *nix )
-
-    //the quick and dirty way is to check for a ':' as the 2nd character in the path
-    if (dataFolder[1] == ':') {
-        strcat(slack, "\\bin\\"); //we're on windows
-    } else {
-        strcat(slack, "/bin/");
-    } //we're on *nix
-
-    //now append the file name
-    strcat(slack, fileName);
-    return slack; //we're done
-}
 
 char nibToHex(int nib)  //converts a nibble to its hex form
 {
@@ -68,81 +43,12 @@ char nibToHex(int nib)  //converts a nibble to its hex form
     return hex[nib & 0xf];
 }
 
-//this is based on code from Benjamin's Elf2HP tool
-void Arg_Check(int argc, char **argv)
-{
-    int i, j, files = 0;
-
-    //first check that we have the HPGCC envrioment var set up
-    dataFolder = getenv("HPGCC");
-
-    if (dataFolder == NULL) {
-        printf("\n\n\nError: HPGCC variable not set!");
-        printf("\n\nBefore using this tool, you should have the 'HPGCC' variable set to");
-        printf("\nto point to the HP-GCC directory (typically c:\\arm-hp)");
-        printf("\nDo not add a trailing slash.\n\n");
-        exit(0);
-    }
-
-    for (i = 1; i < argc; i++) {
-        // Look if we have an option:
-        if (argv[i][0] == '-') {
-            //then which one
-            for (j = 1; argv[i][j] != '\0'; j++) {
-                switch (argv[i][j]) {
-                case 'v':
-                    verbose = 1; //verbose mode for debugging
-                    break;
-
-                case 'r':
-                    rawmode = 1; //raw mode, generate NIBHEX data
-                    break;
-
-                case 'h':
-                    printf("\n\nHP39 Aplet Builder\n\nusage:");
-                    printf("\n\nhp2aplet <inputfile> [-r]");
-                    printf("\n\n'inputfile' is a HP string, produced by HP-GCC. \nYour aplet is created in the current folder. ");
-                    printf("\n\n-r is an optional parameter. ");
-                    printf("\n\nIf you add the -r flag, the convertor instead outputs a text file containing ");
-                    printf("\nthe ARM program suitably formatted for use with the HPTools. ");
-                    printf("\n\nNOTE: Before running this program, you should use the HP39 Aplet Wizard ");
-                    printf("\nto create an aplet project file. Type 'hp39wiz' to run it.");
-
-                    exit(0);
-                    break;
-
-                default:
-                    printf("Option unknown:%c\n\nBailing out", argv[i][j]);
-                    exit(0);
-                    break;
-                }
-            }
-        } else {
-            switch (files) {
-            case 0:
-                strcpy(source, argv[i]);
-                files = 1;
-                break;
-            default:
-                printf("Warning, only 1 filename should be given\n");
-                printf("bailing out\n\n\n");
-                exit(0);
-            }
-        }
-    }
-    if (files != 1) {
-        printf("Error, not input file given.\n");
-        printf("Try hp2aplet -h.\n");
-        exit(0);
-    }
-}
-
 void dumpRawOutput(void)
 {
     int i;
     for (i = 0; i <= 12; i++) { fgetc(inputFile); } //discard the string header
 
-    outputFile = fopen(destination, "w");
+    outputFile = fopen(destination_filename, "w");
 
     int c = 0; //the character
     unsigned int count = 0; //character count
@@ -157,7 +63,7 @@ void dumpRawOutput(void)
 
 }
 
-int loadFile(char *fileName, int fileOffset, unsigned char *buffer, int offset)
+int loadFile(const char *fileName, int fileOffset, unsigned char *buffer, int offset)
 {
     //this loads a file skips the first 'fileOffset' characters
     // and copies it into the buffer at offset 'offset'
@@ -166,9 +72,7 @@ int loadFile(char *fileName, int fileOffset, unsigned char *buffer, int offset)
     verprintf("\n\nAttempting to Read %s into buffer position %d", fileName, offset);
 
     FILE *sourceFile = fopen(fileName, "rb"); //open for binary reading
-
     if (sourceFile == NULL) {
-
         printf("\n\n\n***Error*** Could not open %s\n\n\n", fileName);
         exit(0); //failure, could not open
     }
@@ -179,18 +83,15 @@ int loadFile(char *fileName, int fileOffset, unsigned char *buffer, int offset)
     int i;
     for (i = 0; i != fileOffset; i++) { //discard any header
         fgetc(sourceFile);
-
     }
     verprintf("\nDiscarded the first %d bytes", fileOffset);
 
     while (1) {
         c = fgetc(sourceFile); //read a char
         if (c == EOF) {
-
             fclose(sourceFile);
             verprintf(" - Copied %d bytes", count);
             return count; //bail out if EOF
-
         }
         buffer[offset] = c; //write it
         offset++;
@@ -235,10 +136,10 @@ void createAplet(void)
     unsigned char aplet[300000]; //the aplet structure - 300kb should be heaps
     int i; //iterator
 
-    strcpy((char *)aplet, "HP39BinB"); //aplet header
-    aplet[8] = strlen(apletName);   //8th byte contains the name size, in bytes
-    strcpy((char *)aplet + 9, apletName); //name is copied into the 9th byte onwards
-    int position = 9 + strlen(apletName);
+    strcpy(aplet, "HP39BinB"); //aplet header
+    aplet[8] = strlen(aplet_name);   //8th byte contains the name size, in bytes
+    strcpy(aplet + 9, aplet_name); //name is copied into the 9th byte onwards
+    int position = 9 + strlen(aplet_name);
 
     // next a constant, 0x60102a96 - library ID is embedded.
     // CHANGED BY CLAUDIO - NEW LIBRARY NUMBER IS 0x113 = 275
@@ -251,31 +152,31 @@ void createAplet(void)
 
     int offsetPosition = position;
     position += 6; //skip over the patched offset
-    int apletcodesize = loadFile(addDataPath("apletcode.bin"), 0, aplet, position); //TODO: Error checking
+    int apletcodesize = loadFile(FILE_1, 0, aplet, position); //TODO: Error checking
     position += apletcodesize; //move position to the end of theapletcode.bin data
 
     writeThreeBytes(0x02a740, aplet, position); //write =DOLIST
     position += 3;
 
     //write the HP string, skipping the HPHP49-C header
-    int hpstringsize = loadFile(source, 8, aplet, position);
+    int hpstringsize = loadFile(source_filename, 8, aplet, position);
     position += hpstringsize;
 
     // write the parameters, eg author, aplet title etc
-    writeFiveBytes(0x2a2c + (long long)((strlen(apletName) * 2 + 5) << 20), aplet, position);
+    writeFiveBytes(0x2a2c + (long long)((strlen(aplet_name) * 2 + 5) << 20), aplet, position);
     position += 5;
 
-    strcpy((char *)aplet + position, apletName);
-    position += strlen(apletName); //length of the title
+    strcpy(aplet + position, aplet_name);
+    position += strlen(aplet_name); //length of the title
 
-    writeFiveBytes(0x2a2c + (long long)((strlen(authorName) * 2 + 5) << 20), aplet, position);
+    writeFiveBytes(0x2a2c + (long long)((strlen(author_name) * 2 + 5) << 20), aplet, position);
     position += 5;
 
-    strcpy((char *)aplet + position, authorName);
-    position += strlen(authorName); //length of the author name
+    strcpy(aplet + position, author_name);
+    position += strlen(author_name); //length of the author name
 
     // now do the grob stuff
-    int grobsize = loadFile(grobFileName, 8, aplet, position);
+    int grobsize = loadFile(grob_filename, 8, aplet, position);
     position += grobsize; //append the grob file
 
     writeFiveBytes(0x2911 + (long long)(X << 20), aplet, position); //write grob position
@@ -288,7 +189,7 @@ void createAplet(void)
     position += 5;
 
     // now write the various patched offsets
-    unsigned int numbytes = 3 + hpstringsize + 5 + strlen(apletName) + 5 + strlen(authorName);
+    unsigned int numbytes = 3 + hpstringsize + 5 + strlen(aplet_name) + 5 + strlen(author_name);
     // ADDED 5 BYTES FOR THE NULL LIST - CLAUDIO
     numbytes += grobsize + 5 + 5 + 5;
     unsigned int vf_offset = numbytes * 2 + 6;
@@ -302,7 +203,7 @@ void createAplet(void)
     writeSixBytes(constant, aplet, position);
     position += 6;
 
-    int epilogsize = loadFile(addDataPath("apletepilog.bin"), 0, aplet, position); //append the epilog
+    int epilogsize = loadFile(FILE_2, 0, aplet, position); //append the epilog
     position += epilogsize;
 
     unsigned int totalsize = 6 + apletcodesize + numbytes + 6 + epilogsize;
@@ -312,51 +213,12 @@ void createAplet(void)
     writeSixBytes(offset, aplet, offsetPosition);
 
     // finally, write the aplet to disk
-    outputFile = fopen(destination, "wb"); //open for binary writing
+    outputFile = fopen(destination_filename, "wb"); //open for binary writing
 
     for (i = 0; i < position; i++) {
         fputc(aplet[i], outputFile); //write the char to the file
     }
     fclose(outputFile);
-}
-
-void readConfigFile(void)  //read the configuration file,
-{
-    //TODO: Learn File I/O in C
-    char header[50];
-    char graphics[50];
-
-    FILE *config = fopen("hp39prj.dat", "r");
-    if (config == NULL) {
-        printf("\n\n\n***ERROR***\n\nNo HP39 Project File found!");
-        printf("\n\nType 'hp39wiz' to create a project.\n\n");
-        exit(0); //quit
-    }
-
-    fgets(header, 500, config);
-    fgets(apletName, 500, config);
-    fgets(authorName, 500, config);
-    fgets(graphics, 500, config);
-
-    strtok(header, "\n"); //get rid of the newlines
-    strtok(apletName, "\n");
-    strtok(authorName, "\n");
-    strtok(graphics, "\n");
-
-    verprintf("\n\nAplet Name: %s Author: %s\n", apletName, authorName);
-
-    if (graphics[0] == 'Y') { //theres graphics
-
-        fgets(grobFileName, 500, config);
-        strtok(grobFileName, "\n"); //get rid of the newline
-
-        fscanf(config, "%d%d", &X, &Y); //read in X and Y parameters
-    } else { //no user graphics, use a blank grob
-        verprintf("\n\nNo user graphic");
-        strcpy(grobFileName, addDataPath("blank.gro")); //use a blank grob.
-    }
-    verprintf("\n\ngrob file is %s X:%d Y:%d", grobFileName, X, Y);
-    fclose(config);
 }
 
 void createSupportFiles(void)
@@ -368,7 +230,7 @@ void createSupportFiles(void)
     FILE *hp39dir_cur = fopen("hp39dir.cur", "w");
     FILE *hp39dir_000 = fopen("hp39dir.000", "w");
     FILE *hplib_out = fopen(HP_LIB_FILE_OUT, "wb");
-    FILE *hplib_in = fopen(addDataPath(HP_LIB_FILE), "rb");
+    FILE *hplib_in = fopen(HP_LIB_FILE, "rb");
 
     if (hplib_in == NULL) {
         printf("\n\nError! Could not find library file %s\n\n", HP_LIB_FILE);
@@ -381,8 +243,8 @@ void createSupportFiles(void)
     }
 
     fputs("HP39AscA A 11 HP39DIR.0004 Root", hp39dir_cur);
-    fprintf(hp39dir_000, "HP39AscA B 12 HPGCC000.000%d %s H 11 LIB275L.0007 LIB275L ", strlen(apletName), apletName);
-    //  verprintf("\n\nHP39AscA B 12 HPGCC000.000%d %s H 12 LIB1537L.0008 LIB1537L ",strlen(apletName),apletName);
+    fprintf(hp39dir_000, "HP39AscA B 12 HPGCC000.000%d %s H 11 LIB275L.0007 LIB275L ", strlen(aplet_name), aplet_name);
+    //  verprintf("\n\nHP39AscA B 12 HPGCC000.000%d %s H 12 LIB1537L.0008 LIB1537L ",strlen(aplet_name),aplet_name);
 
     //now copy library file into the current directory
     int c = 0;
@@ -400,25 +262,44 @@ void createSupportFiles(void)
 
 int main(int argc, char **argv)
 {
-    Arg_Check(argc, argv);
-    verprintf("\nInput: %s Output: %s\n\n", source, destination);
+    if (argc == 2) {
+        // raw mode, creates NIBHEX
+        verprintf("\nInput: %s Output: %s\n\n", source_filename, destination_filename);
+        inputFile = fopen(source_filename, "rb"); //open for reading
+        destination_filename = raw_filename;
 
-    inputFile = fopen(source, "rb"); //open for reading
-
-    if (inputFile == 0) {
-        printf("\n\nError! Cannot read from %s", source);
-        exit(0); //bail out
-    }
-
-    if (rawmode) { //make NIBHEX
         verprintf("Generating NIBHEX output\n\n"); //setup output file
-        strcpy(destination, "HPGCC000.S");
-        dumpRawOutput(); //go!
-    } else { //make an aplet
-        strcpy(destination, "HPGCC000.000"); //setup output file
-        readConfigFile();
+        dumpRawOutput();
+    } else if (argc == 4 || argc == 7) {
+        // aplet mode
+        verprintf("\nInput: %s Output: %s\n\n", source_filename, destination_filename);
+        inputFile = fopen(source_filename, "rb"); //open for reading
+        destination_filename = aplet_filename;
+
+        aplet_name = argv[3];
+        author_name = argv[4];
+        if (argc == 5) { //there's graphics
+            grob_filename = argv[5];
+            X = atoi(argv[6]);
+            Y = atoi(argv[7]);
+        } else { //no user graphics, use a blank grob
+            verprintf("\n\nNo user graphic");
+            grob_filename = default_grob;
+        }
+        verprintf("\n\ngrob file is %s X:%d Y:%d", grob_filename, X, Y);
+
         createAplet();
         createSupportFiles();
+    } else {
+        printf("\n\nHP39 Aplet Builder\n\nusage:");
+        printf("\n\nhp2aplet <inputfile> [-r]");
+        printf("\n\n'inputfile' is a HP string, produced by HP-GCC. \nYour aplet is created in the current folder. ");
+        printf("\n\n-r is an optional parameter. ");
+        printf("\n\nIf you add the -r flag, the convertor instead outputs a text file containing ");
+        printf("\nthe ARM program suitably formatted for use with the HPTools. ");
+        printf("\n\nNOTE: Before running this program, you should use the HP39 Aplet Wizard ");
+        printf("\nto create an aplet project file. Type 'hp39wiz' to run it.");
+        exit(0);
     }
     fclose(inputFile); //clean up
     fclose(outputFile);
