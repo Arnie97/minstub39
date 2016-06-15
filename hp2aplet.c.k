@@ -31,12 +31,21 @@ int verbose = 1 // not verbose by default
 int X = 0, Y = 0 // position of the graphic
 
 
+FILE* open(const char *filename, const char *mode):
+    "Wrap fopen() to catch exceptions."
+    FILE *fp = fopen(filename, mode)
+    if !fp:
+        fprintf(stderr, "Error: Cannot open file '%s'.\n", filename)
+        exit(EXIT_FAILURE)
+    return fp
+
+
 size_t dump_raw_output():
     "Convert a HP string file to a text file containing
         the raw ARM program suitably formatted for use with the HPTools."
 
-    FILE *input_file = fopen(src_filename, "rb")
-    FILE *output_file = fopen(dest_filename, "w")
+    FILE *input_file = open(src_filename, "rb")
+    FILE *output_file = open(dest_filename, "w")
 
     // discard the string header
     fseek(input_file, 12, SEEK_SET)
@@ -60,7 +69,7 @@ size_t cat(FILE *output, int skip_bytes, const char *filename):
     "Open and read a file, skip the first few bytes, then write the
         leaving bytes into the stream. Return the number of copied bytes."
 
-    FILE *input = fopen(filename, "rb")
+    FILE *input = open(filename, "rb")
 
     // get the size of file
     fseek(input, 0, SEEK_END)
@@ -87,7 +96,7 @@ size_t write_bytes(FILE *output, size_t size, long long bytes):
 void create_aplet():
     "Create file structure of a HP39g+ aplet."
 
-    FILE *aplet = fopen(dest_filename, "wb")
+    FILE *aplet = open(dest_filename, "wb")
     fputs("HP39BinB", aplet)
     fputc(strlen(aplet_name), aplet)  // length of aplet name, in bytes
     fputs(aplet_name, aplet)  // name itself
