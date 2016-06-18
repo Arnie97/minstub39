@@ -1,10 +1,14 @@
-HPGCC000.000: hpgccaplet.s
-	rplcomp hpgccaplet.s hpgccaplet.c
-	sasm -E -B -W -a hpgccaplet.l -o hpgccaplet.o hpgccaplet.c
-	sload -H hpgccaplet.m
-	tail hpgccaplet.lr
+HPGCC000.000: hpgccaplet.lr
+
+%.lr: %.m %.o
+	sload -H $*.m
+	cat $@
+
+%.o %.l: %.a
+	sasm -E -B -W -a $*.l -o $*.o $<
+
+%.a: %.s
+	rplcomp $< $@
+
 clean:
-	rm hpgccaplet.l
-	rm hpgccaplet.lr
-	rm hpgccaplet.o
-	rm HPGCC000.000
+	rm *.l *.lr
