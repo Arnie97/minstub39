@@ -10,13 +10,9 @@ INCLUDE =Common.h
 * ARM ToolBox39 ROMPOINTERS
 ASSEMBLE
 =~xPrRUN	EQU	#113+4096*0
-=~xShSPLASH	EQU	#113+4096*1
-=~xHpgccABOUT	EQU	#113+4096*2
 RPL
 
 EXTERNAL xPrRUN
-EXTERNAL xShSPLASH
-EXTERNAL xHpgccABOUT
 
 ASSEMBLE
 	Dir_Head 11,HPGCC Aplet,113
@@ -35,7 +31,6 @@ ASSEMBLE
 	Link	_Exit
 	Link	_Action
 	Link	_Reset
-	Link    _About
 
 * Add links to more routines here
 * they must be paired w/ the defines just below
@@ -48,7 +43,6 @@ DEFINE Entry	INT_01
 DEFINE Exit	INT_02
 DEFINE Action	INT_03
 DEFINE Reset	INT_04
-DEFINE About	INT_05
 
 * Add defines for more routines here
 * INT_05..INT_09, INT_0A..INT_0F or BINT INT_NN
@@ -69,7 +63,6 @@ RPL
 DEFINE	HPGCCData@	LastBut3
 DEFINE	HPGCCData!	LastBut3 REPLACE DROP
 DEFINE	ARMCode@	LastBut3 CARCOMP
-DEFINE  SplashData@ LastBut3 INNERCOMP ROLLDROP DROP
 DEFINE  CustomData@ LastBut3 SEVEN NTHCOMPDROP
 
 
@@ -104,23 +97,7 @@ NAMELESS _Main
 	;
 
 	'			( 5 view hard key handlers )
-	::
-		{
-			{	( ENTER will start your main code )
-				kcEnter
-				::
-					TakeOver
-					Action
-				;
-			}
-			NULL{}
-			NULL{}
-			NULL{}
-			NULL{}
-			NULL{}
-		}
-		ONE KeyFace
-	;
+	::;
 
 	TRUE					( 4 Allow normal keys )
 
@@ -129,21 +106,14 @@ NAMELESS _Main
 			$ ""
 			::
 				TakeOver
-				SplashData@
-				xShSPLASH
+				Action
 			;
 		}
 		NullMenuKey
 		NullMenuKey
 		NullMenuKey
 		NullMenuKey
-		{
-			$ ""
-			::
-				TakeOver
-				About
-			;
-		}
+		NullMenuKey
 	}
 
 	ONE 					( 2 Initial menu page )
@@ -162,8 +132,7 @@ NAMELESS _Entry
 	TopicVar1!
 
 	( CUSTOMIZABLE SPLASHSCREEN )
-	SplashData@
-	xShSPLASH
+*	Action
 ;
 
 
@@ -215,18 +184,11 @@ NAMELESS _Reset
 ::
 	HPGCCData@
 	INNERCOMP
-	NULL{}
+*	NULL{}
 	ROTDROPSWAP
 {}N
 	HPGCCData!
 ;
-
-
-NAMELESS _About
-::
-	xHpgccABOUT
-;
-
 
 ASSEMBLE
 endCode
