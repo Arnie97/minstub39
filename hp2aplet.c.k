@@ -10,13 +10,14 @@ usage: %s <src> <dest> [aplet_name author_name [grob_file [x y]]]
 
 Convert a HP string file produced by HP-GCC into various formats.
 
-If the aplet name is present, convert to an aplet for HP39 series.
-Otherwise, to a text format compatible with the HPTools.
+If the aplet name is present, patch the skeleton aplet according to
+ARM program from the HP string file and command line parameters.
+Otherwise, convert the HP string to a text format compatible with the HPTools.
 
 "
 
 const char default_grob[] = "blank.gro"
-const char aplet_code_file[] = "apletcode.bin", epilog_file[] = "apletepilog.bin"
+const char skeleton_filename[] = "HPGCC000.000"
 
 // configuration stuff (read in from command line arguments)
 const char *aplet_name, *author_name
@@ -65,9 +66,14 @@ size_t dump_raw_output():
     return count
 
 
-size_t cat(FILE *output, int skip_bytes, const char *filename):
-    "Open and read a file, skip the first few bytes, then write the
-        leaving bytes into the stream. Return the number of copied bytes."
+size_t cat(
+    FILE *output, int skip_bytes, const char *filename,
+    int (*callback)(char **beg, char **end)
+):
+    "Open a file and skip the first few bytes.
+        If the callback function is present, invoke it to do some hacks.
+        Then copy the remaining bytes into the given stream.
+        Return the number of copied bytes."
 
     FILE *input = open(filename, "rb")
 
@@ -78,10 +84,41 @@ size_t cat(FILE *output, int skip_bytes, const char *filename):
     // rewind and skip the header
     fseek(input, skip_bytes, SEEK_SET)
 
+    // read the remaining bytes
     char buffer[size]
     fread(buffer, 1, size, input)
-    fwrite(buffer, 1, size, output)
+
+    // invoke the callback function
+    char *beg = buffer, *end = buffer + size
+    if callback:
+        if callback(&beg, &end):
+            fprintf(stderr, "Error: Invalid aplet skeleton.\n")
+            exit
+
+    fwrite(beg, 1, end - beg, output)
     return size
+
+
+int truncate_aplet_code(char **beg, char **end):
+    const char magic[] = "ARMCODE HERE!!!"
+    size_t len = strlen(magic)
+
+    for char *p = *beg; p + len < *end; p++:
+        if strncmp(p, magic, len) == 0:
+            *end = p - 8
+            return memcmp(*end, "\x40\xA7\x02\x2C", 4)
+    return 1
+
+
+int truncate_aplet_epilog(char **beg, char **end):
+    const char magic[] = "t*\xb0\x12\x03+1"
+    size_t len = strlen(magic)
+
+    for char *p = *end - 1; p >= *beg; p--:
+        if strncmp(p, magic, len) == 0:
+            *beg = p + 11
+            return memcmp(*beg, "t*", 2)
+    return 1
 
 
 size_t write_bytes(FILE *output, size_t size, long long bytes):
@@ -110,14 +147,14 @@ void create_aplet():
     fseek(aplet, 6, SEEK_CUR)
 
     // write the aplet code binary
-    cat(aplet, 0, aplet_code_file)
+    cat(aplet, 30, skeleton_filename, truncate_aplet_code)
     size_t offset_marker = ftell(aplet)
 
     // write =DOLIST
     write_bytes(aplet, 3, 0x02a740)
 
     // write the HP string, skipping the HPHP49-C header
-    cat(aplet, 8, src_filename)
+    cat(aplet, 8, src_filename, NULL)
 
     // write aplet title
     write_bytes(aplet, 5, 0x2a2c + ((strlen(aplet_name) * 2 + 5LL) << 20))
@@ -128,7 +165,7 @@ void create_aplet():
     fputs(author_name, aplet)
 
     // append the grob file, skipping the HPHP49-C header
-    cat(aplet, 8, grob_filename)
+    cat(aplet, 8, grob_filename, NULL)
 
     // write grob position
     write_bytes(aplet, 5, 0x2911 + ((long long)X << 20))
@@ -148,7 +185,7 @@ void create_aplet():
     write_bytes(aplet, 6, constant)
 
     // append the epilog
-    cat(aplet, 0, epilog_file)
+    cat(aplet, 0, skeleton_filename, truncate_aplet_epilog)
 
     // go back and write the patched offset
     size_t total_size = ftell(aplet) - patched_offset_position
@@ -197,4 +234,4 @@ int main(int argc, char *argv[]):
     verprintf("grob file is %s X:%d Y:%d\n", grob_filename, X, Y)
 
     create_aplet()
-    return 0
+    return EXIT_SUCCESS
