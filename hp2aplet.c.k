@@ -6,30 +6,21 @@ const char help_text[] = "\
 
 HP39 Aplet Builder MARK II
 
-usage: %s <src> <dest> [aplet_name author_name [grob_file [x y]]]
+usage: %s <src> <dest> [aplet_name]
 
 Convert a HP string file produced by HP-GCC into various formats.
 
 If the aplet name is present, patch the skeleton aplet according to
-ARM program from the HP string file and command line parameters.
+the name and ARM program from the HP string file.
 Otherwise, convert the HP string to a text format compatible with the HPTools.
 
 "
 
-const char default_grob[] = "blank.gro"
 const char skeleton_filename[] = "HPGCC000.000"
 
 // configuration stuff (read in from command line arguments)
-const char *aplet_name, *author_name
-const char *src_filename, *dest_filename, *grob_filename
+const char *src_filename, *dest_filename, *aplet_name
 
-#define nib_to_hex(nib) ("0123456789ABCDEF"[(nib) & 0xf])
-
-// verbose printf
-#define verprintf if (verbose) printf
-int verbose = 1 // not verbose by default
-
-int X = 0, Y = 0 // position of the graphic
 
 
 FILE* open(const char *filename, const char *mode):
@@ -59,7 +50,7 @@ size_t dump_raw_output():
             fprintf(output_file, "\n  NIBHEX ")
 
         // print it (swap nibbles)
-        fprintf(output_file, "%c%c", nib_to_hex(c), nib_to_hex(c >> 4))
+        fprintf(output_file, "%x%x", c & 0xf, (c >> 4) & 0xf)
 
     fclose(input_file)
     fclose(output_file)
@@ -93,7 +84,7 @@ size_t cat(
     if callback:
         if callback(&beg, &end):
             fprintf(stderr, "Error: Invalid aplet skeleton.\n")
-            exit
+            exit(EXIT_FAILURE)
 
     fwrite(beg, 1, end - beg, output)
     return size
@@ -156,20 +147,17 @@ void create_aplet():
     // write the HP string, skipping the HPHP49-C header
     cat(aplet, 8, src_filename, NULL)
 
-    // write aplet title
-    write_bytes(aplet, 5, 0x2a2c + ((strlen(aplet_name) * 2 + 5LL) << 20))
-    fputs(aplet_name, aplet)
-
-    // write author
-    write_bytes(aplet, 5, 0x2a2c + ((strlen(author_name) * 2 + 5LL) << 20))
-    fputs(author_name, aplet)
+    // write aplet title & author
+    for int i = 0; i < 2; i++:
+        write_bytes(aplet, 5, 0x2a2c + (5LL << 20))
 
     // append the grob file, skipping the HPHP49-C header
-    cat(aplet, 8, grob_filename, NULL)
+    write_bytes(aplet, 5, 0x01102b1e)
+    write_bytes(aplet, 6, 0x100001)
 
     // write grob position
-    write_bytes(aplet, 5, 0x2911 + ((long long)X << 20))
-    write_bytes(aplet, 5, 0x2911 + ((long long)Y << 20))
+    for int i = 0; i < 2; i++:
+        write_bytes(aplet, 5, 0x2911)
 
     // null list as custom application data
     write_bytes(aplet, 5, 0x2a74 + (0x312bLL << 20))
@@ -178,10 +166,6 @@ void create_aplet():
     size_t bytes_wrote = ftell(aplet) - offset_marker
     size_t vf_offset = bytes_wrote * 2 + 6
     long long constant = 0x312b + ((long long)vf_offset << 20)
-
-    verprintf("vf_offset: %u (%u bytes), constant: 0x%x %x\n",
-        vf_offset, bytes_wrote, (int)(constant >> 32), (int)constant)
-
     write_bytes(aplet, 6, constant)
 
     // append the epilog
@@ -190,8 +174,12 @@ void create_aplet():
     // go back and write the patched offset
     size_t total_size = ftell(aplet) - patched_offset_position
     size_t patched_offset = (total_size - 6) * 2
-    verprintf("Writing the patched offset %X to position 0x%X\n",
-        patched_offset, patched_offset_position)
+    printf(
+        "Offset: %zu bytes, vf_offset: %#zx, constant: %#llx\n"
+        "Writing the patched offset %#zx to position %#zx\n",
+        bytes_wrote, vf_offset, constant,
+        patched_offset, patched_offset_position
+    )
 
     fseek(aplet, patched_offset_position, SEEK_SET)
     write_bytes(aplet, 6, patched_offset)
@@ -202,36 +190,19 @@ void create_aplet():
 int main(int argc, char *argv[]):
     "Parse the command line arguments."
 
-    switch:
-        argc - 1
-    case 2, 4, 5, 7:
-        pass
-    default:
+    if argc != 3 && argc != 4:
         fprintf(stderr, help_text, argv[0])
-        return 1
+        return EXIT_FAILURE
 
     src_filename = argv[1]
     dest_filename = argv[2]
-    verprintf("Input: %s Output: %s\n", src_filename, dest_filename)
+    printf("Input: %s Output: %s\n", src_filename, dest_filename)
 
-    if argc - 1 == 2:  // raw mode, creates NIBHEX
-        verprintf("Generating NIBHEX output\n")
+    if argc == 3:  // raw mode, creates NIBHEX
+        puts("Generating NIBHEX output")
         dump_raw_output()
-        return 0
+    else:  // aplet mode, w/ or w/o specified grob
+        aplet_name = argv[3]
+        create_aplet()
 
-    // aplet mode, w/ or w/o specified grob
-    aplet_name = argv[3]
-    author_name = argv[4]
-
-    if argc - 1 == 4:  // w/o custom graphics
-        verprintf("No user graphic, ")
-        grob_filename = default_grob
-    else:
-        grob_filename = argv[5]
-        if argc == 7:
-            X = atoi(argv[6])
-            Y = atoi(argv[7])
-    verprintf("grob file is %s X:%d Y:%d\n", grob_filename, X, Y)
-
-    create_aplet()
     return EXIT_SUCCESS
