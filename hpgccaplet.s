@@ -23,9 +23,9 @@ StndtType
 INCLUDE =Sharedvar.h
 
 ASSEMBLE
-	Vfield  L34,IntTable
+	Vfield	L34,IntTable
 	CON(5)	=DOHSTR
-	REL(5)  endLink
+	REL(5)	endLink
 	Link	_Main
 	Link	_Entry
 	Link	_Exit
@@ -63,29 +63,30 @@ RPL
 DEFINE	HPGCCData@	LastBut3
 DEFINE	HPGCCData!	LastBut3 REPLACE DROP
 DEFINE	ARMCode@	LastBut3 CARCOMP
-DEFINE  CustomData@ LastBut3 SEVEN NTHCOMPDROP
+DEFINE	CustomData@	LastBut3 SEVEN NTHCOMPDROP
 
 
 * Main code entry
+* For each view, the main code entry is supposed to return 8 arguments
+* (similar to the HP 48/49 ParOuterLoop).
 NAMELESS _Main
 ::
-*     StndCheck			( Default handler for the aplet )
+* StndCheck			( Default handler for the aplet )
 * REPLACED BY THE FOLLOWING TO KNOW WHICH VIEW THE USER ENTERED FROM
 	{ StndVIEW StndVar StndReset StndEntry StndExit } BinLookup case EVAL
 
 	( STORE THE VIEW NUMBER IN TOPICVAR2 )
 	TopicVar2!
 
-** For each view, the main code is supposed to return 8 arguments(similar to the HP48/49 ParOuterLoop):
-** Level: 8: View Entry handler (program)
-**        7: View Exit handler (program)
-**        6: Display handler (program)
-**        5: Hard Key handler (program)
-**        4: Flag to allow normal keys (TRUE or FALSE)
-**        3: Menu Definition (list)
-**        2: Initial Menu Page (System Binary)
-**        1: Error handler (program)
-*<SOURCE CODE END>
+* Levels:
+* 8: View entry handler	(program)
+* 7: View exit handler	(program)
+* 6: Display handler	(program)
+* 5: Hard key handler	(program)
+* 4: Normal keys flag	(boolean)
+* 3: Menu definition	(list)
+* 2: Initial menu page	(system binary)
+* 1: Error handler	(program)
 
 	' Entry			( 8 view entry )
 
@@ -97,18 +98,22 @@ NAMELESS _Main
 	;
 
 	'			( 5 view hard key handlers )
-	::;
-
-	TRUE					( 4 Allow normal keys )
-
-	{					( 3 Initial menu )
+	::
 		{
-			$ ""
-			::
-				TakeOver
-				Action
-			;
+			NULL{}
+			NULL{}
+			NULL{}
+			NULL{}
+			NULL{}
+			NULL{}
 		}
+		ONE KeyFace
+	;
+
+	TRUE			( 4 Allow normal keys )
+
+	{			( 3 Initial menu )
+		NullMenuKey
 		NullMenuKey
 		NullMenuKey
 		NullMenuKey
@@ -116,9 +121,9 @@ NAMELESS _Main
 		NullMenuKey
 	}
 
-	ONE 					( 2 Initial menu page )
+	ONE			( 2 Initial menu page )
 
-	'					( 1 Error object )
+	'			( 1 Error object )
 	::
 		TURNMENUON RECLAIMDISP ERRJMP
 	;
@@ -132,7 +137,7 @@ NAMELESS _Entry
 	TopicVar1!
 
 	( CUSTOMIZABLE SPLASHSCREEN )
-*	Action
+	Action
 ;
 
 
@@ -184,11 +189,12 @@ NAMELESS _Reset
 ::
 	HPGCCData@
 	INNERCOMP
-*	NULL{}
+	NULL{}
 	ROTDROPSWAP
 {}N
 	HPGCCData!
 ;
+
 
 ASSEMBLE
 endCode
