@@ -29,7 +29,6 @@ ASSEMBLE
 	Link	_Main
 	Link	_Entry
 	Link	_Exit
-	Link	_Action
 	Link	_Reset
 
 * Add links to more routines here
@@ -41,8 +40,7 @@ RPL
 DEFINE Main	INT_00
 DEFINE Entry	INT_01
 DEFINE Exit	INT_02
-DEFINE Action	INT_03
-DEFINE Reset	INT_04
+DEFINE Reset	INT_03
 
 * Add defines for more routines here
 * INT_05..INT_09, INT_0A..INT_0F or BINT INT_NN
@@ -136,27 +134,6 @@ NAMELESS _Entry
 	CustomData@
 	TopicVar1!
 
-	( CUSTOMIZABLE SPLASHSCREEN )
-	Action
-;
-
-
-NAMELESS _Exit
-::
-	( SAVE APLET DATA AS PERMANENT )
-	HPGCCData@
-	INNERCOMP
-	TopicVar1@
-	ROTDROPSWAP
-	{}N
-	HPGCCData!
-
-	LeaveGraphView
-;
-
-
-NAMELESS _Action
-::
 	( PASS CURRENT VIEW NUMBER )
 	TopicVar2@
 
@@ -181,6 +158,20 @@ NAMELESS _Action
 
 	( DROP THE VIEW NUMBER )
 	DROP
+;
+
+
+NAMELESS _Exit
+::
+	( SAVE APLET DATA AS PERMANENT )
+	HPGCCData@
+	INNERCOMP
+	TopicVar1@
+	ROTDROPSWAP
+	{}N
+	HPGCCData!
+
+	LeaveGraphView
 ;
 
 
