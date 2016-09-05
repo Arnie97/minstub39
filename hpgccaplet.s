@@ -98,7 +98,7 @@ NAMELESS _Main
 	'			( 5 view hard key handlers )
 	::
 		{
-			NULL{}
+			{ kcOn :: TurnOff TakeOver Entry ; }
 			NULL{}
 			NULL{}
 			NULL{}
@@ -182,7 +182,7 @@ NAMELESS _Reset
 	INNERCOMP
 	NULL{}
 	ROTDROPSWAP
-{}N
+* {}N
 	HPGCCData!
 ;
 
