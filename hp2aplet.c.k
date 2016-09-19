@@ -147,18 +147,6 @@ void create_aplet():
     // write the HP string, skipping the HPHP49-C header
     cat(aplet, 8, src_filename, NULL)
 
-    // write aplet title & author
-    for int i = 0; i < 2; i++:
-        write_bytes(aplet, 5, 0x2a2c + (5LL << 20))
-
-    // append the grob file, skipping the HPHP49-C header
-    write_bytes(aplet, 5, 0x01102b1e)
-    write_bytes(aplet, 6, 0x100001)
-
-    // write grob position
-    for int i = 0; i < 2; i++:
-        write_bytes(aplet, 5, 0x2911)
-
     // null list as custom application data
     write_bytes(aplet, 5, 0x2a74 + (0x312bLL << 20))
 
