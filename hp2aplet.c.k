@@ -36,24 +36,24 @@ size_t dump_raw_output():
     "Convert a HP string file to a text file containing
         the raw ARM program suitably formatted for use with the HPTools."
 
-    FILE *input_file = open(src_filename, "rb")
-    FILE *output_file = open(dest_filename, "w")
+    FILE *input = open(src_filename, "rb")
+    FILE *output = open(dest_filename, "wb")
 
     // discard the string header
-    fseek(input_file, 12, SEEK_SET)
+    fseek(input, 12, SEEK_SET)
 
     size_t count = 0;  // character count
-    for int count = 0, c; (c = fgetc(input_file)) != EOF; count++:
+    for int count = 0, c; (c = fgetc(input)) != EOF; count++:
 
         // new line every 30 characters
         if count % 30 == 0:
-            fprintf(output_file, "\n  NIBHEX ")
+            fprintf(output, "\n  NIBHEX ")
 
         // print it (swap nibbles)
-        fprintf(output_file, "%x%x", c & 0xf, (c >> 4) & 0xf)
+        fprintf(output, "%x%x", c & 0xf, (c >> 4) & 0xf)
 
-    fclose(input_file)
-    fclose(output_file)
+    fclose(input)
+    fclose(output)
     return count
 
 
@@ -121,7 +121,7 @@ size_t write_bytes(FILE *output, size_t size, long long bytes):
     return size
 
 
-void create_aplet():
+size_t create_aplet():
     "Create file structure of a HP39g+ aplet."
 
     FILE *aplet = open(dest_filename, "wb")
@@ -172,25 +172,68 @@ void create_aplet():
     fseek(aplet, patched_offset_position, SEEK_SET)
     write_bytes(aplet, 6, patched_offset)
 
+    // get the size of file
+    fseek(aplet, 0, SEEK_END)
+    bytes_wrote = ftell(aplet)
+
     fclose(aplet)
+    return bytes_wrote
+
+
+size_t create_wrapper():
+    "Patch a HP string object to wrap it in UserRPL."
+
+    // add RPL header and skip the original header
+    FILE *output = open(dest_filename, "wb")
+    fputs("HPHP49-B\x9D-\x90\x9B""8", output)
+    size_t bytes_wrote = cat(output, 8, src_filename, NULL)
+
+    // append the epilog
+    fwrite("\x92.0\x11\0@\x9D""8+1\0", 1, 11, output)
+    fclose(output)
+    return bytes_wrote + 16 + 11
 
 
 int main(int argc, char *argv[]):
     "Parse the command line arguments."
 
-    if argc != 3 && argc != 4:
+    if argc < 2 || argc > 4:
         fprintf(stderr, help_text, argv[0])
         return EXIT_FAILURE
 
-    src_filename = argv[1]
-    dest_filename = argv[2]
-    printf("Input: %s Output: %s\n", src_filename, dest_filename)
+    char buffer[strlen(argv[1]) + 5]
+    if argc == 2:
+        // buffer for file name with .bak suffix
+        strcpy(buffer, argv[1])
+        strcat(buffer, ".bak")
 
-    if argc == 3:  // raw mode, creates NIBHEX
-        puts("Generating NIBHEX output")
-        dump_raw_output()
-    else:  // aplet mode, w/ or w/o specified grob
-        aplet_name = argv[3]
-        create_aplet()
+        // move the file for backup
+        src_filename = buffer
+        dest_filename = argv[1]
+        remove(src_filename)
+        rename(dest_filename, src_filename)
+    else:
+        src_filename = argv[1]
+        dest_filename = argv[2]
+        if argc == 4:
+            aplet_name = argv[3]
 
+    const char *msg[] = {
+        "UserRPL wrapper",
+        "NIBHEX output",
+        "aplet skeleton"
+    }
+    size_t (*func[])() = {
+        &create_wrapper,
+        &dump_raw_output,
+        &create_aplet
+    }
+
+    argc -= 2
+    printf(
+        "Input: %s Output: %s\n"
+        "Generating %s...\n",
+        src_filename, dest_filename, msg[argc]
+    )
+    printf("Well done, %zu bytes written.", (*func[argc])())
     return EXIT_SUCCESS
